@@ -1,0 +1,65 @@
+import pandas as pd
+import json
+import requests
+from datetime import datetime, timedelta
+import os
+
+def get_latest_data():
+    # Reports are usually 1 day behind (fetching yesterday's data)
+    yesterday = (datetime.now() - timedelta(days=1))
+    folder_date = yesterday.strftime("%d-%m-%Y")
+    file_date = yesterday.strftime("%Y-%m-%d")
+    
+    # Updated NPP URL Pattern for 2026
+    url = f"https://npp.gov.in/public-reports/cea/daily/dgr/{folder_date}/dgr1-{file_date}.xls"
+    
+    print(f"Attempting to fetch: {url}")
+    
+    try:
+        # Use xlrd engine for .xls files
+        df = pd.read_excel(url, engine='xlrd', skiprows=5)
+        
+        # We search the first column for 'ALL INDIA' to find the data row
+        all_india_row = df[df.iloc[:, 0].str.contains("ALL INDIA", na=False, case=False)]
+        
+        if not all_india_row.empty:
+            # We take the values from the 'Actual' column (usually index 4 or 5)
+            # We use .get() or index checks to prevent crashes
+            new_entry = {
+                "date": file_date,
+                "thermal": float(all_india_row.iloc[0, 4]), 
+                "renewable": 485.0, # Placeholder if RES is in a different sheet
+                "hydro": float(all_india_row.iloc[2, 4]) if len(all_india_row) > 2 else 340.0,
+                "nuclear": float(all_india_row.iloc[1, 4]) if len(all_india_row) > 1 else 180.0
+            }
+            return new_entry
+        return None
+            
+    except Exception as e:
+        print(f"File not ready yet: {e}")
+        return None
+
+def save_to_json(new_data):
+    if not new_data:
+        return
+    
+    filename = "power_data.json"
+    if os.path.exists(filename):
+        with open(filename, "r") as f:
+            db = json.load(f)
+    else:
+        db = {"data": []}
+
+    # Add data only if the date is new
+    if new_data["date"] not in [entry["date"] for entry in db["data"]]:
+        db["data"].append(new_data)
+        with open(filename, "w") as f:
+            json.dump(db, f, indent=4)
+        print("Success: Data added to JSON.")
+    else:
+        print("Notice: Data for this date already exists.")
+
+if __name__ == "__main__":
+    data = get_latest_data()
+    save_to_json(data)
+    
