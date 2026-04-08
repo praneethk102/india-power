@@ -1,0 +1,39 @@
+name: Daily India Power Data Sync
+
+on:
+  schedule:
+    # 4:30 AM UTC = 10:00 AM IST (IST is UTC +5:30)
+    - cron: '30 4 * * *' 
+  workflow_dispatch: # Allows you to click a button to run it manually
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Pull your code into the virtual machine
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Setup the Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      # 3. Install required libraries (pandas and xlrd for Excel files)
+      - name: Install Dependencies
+        run: pip install pandas xlrd requests openpyxl
+
+      # 4. Run your Python script
+      - name: Execute Scraper
+        run: python update_data.py
+
+      # 5. Save the new JSON data back to your repo
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "PowerDataBot"
+          git config --global user.email "bot@github.com"
+          git add power_data.json
+          git commit -m "Auto-update: $(date)" || exit 0
+          git push
+          
